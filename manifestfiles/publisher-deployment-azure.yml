@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: publisher
+  labels:
+    app: publisher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: publisher
+  template:
+    metadata:
+      labels:
+        app: publisher
+    spec:
+      containers:
+      - name: publisher
+        image: az4registry.azurecr.io/publisher-image-50:latest
+        ports:
+        - containerPort: 80
+        imagePullPolicy: IfNotPresent
+        # volumeMounts:
+        # - name: kafka-ssl-config
+        #   mountPath: "/bitnami/kafka/config/certs"
+        #   readOnly: false
+      imagePullSecrets:
+      - name: acr-secret
+      # volumes:
+      # - name: kafka-ssl-config
+      #   secret:
+      #     secretName: kafka-ssl-config
+---
+# https://kubernetes.io/docs/concepts/services-networking/service/
+apiVersion: v1
+kind: Service
+metadata:
+  name: publisher
+  labels:
+    app: publisher
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+  selector:
+    app: publisher
+  type: LoadBalancer

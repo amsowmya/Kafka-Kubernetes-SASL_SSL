@@ -1,0 +1,266 @@
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: kafka-credentials
+# type: Opaque
+# data:
+#   username: a2Fma2Ficm9rZXI=
+#   password: VHJpWmV0dDA=
+# ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: client-properties-config
+data:
+  client.properties: |
+    security.protocol=SASL_SSL
+    sasl.mechanism=SCRAM-SHA-512
+    sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username="alocalbox" password="TriZett0";
+    ssl.truststore.location=/bitnami/kafka/config/certs/kafka.client.truststore.jks
+    ssl.truststore.password=TriZett0
+    ssl.keystore.location=/bitnami/kafka/config/certs/kafka.client.keystore.jks
+    ssl.keystore.password=TriZett0
+    ssl.key.password=TriZett0
+    ssl.keystore.type=JKS
+    ssl.endpoint.identification.algorithm=
+  kafka_jaas.conf: |
+    KafkaServer {
+      org.apache.kafka.common.security.scram.ScramLoginModule required
+      username="alocalbox"
+      password=TriZett0;
+    };
+    Client {
+      org.apache.zookeeper.server.auth.DigestLoginModule required
+      username=zkadmin
+      password=TriZett0;
+    };
+  server0.properties: |
+    broker.id=-1
+    listeners=SASL_SSL://:9094,EXTERNAL://:30092
+    advertised.listeners=SASL_SSL://:9094,EXTERNAL://kafka-ss-0-0.kafka-0.default.svc.cluster.local:30092
+    listener.security.protocol.map=PLAINTEXT:PLAINTEXT,SSL:SSL,SASL_PLAINTEXT:SASL_PLAINTEXT,SASL_SSL:SASL_SSL,EXTERNAL:SASL_SSL
+    num.network.threads=3
+    num.io.threads=8
+    socket.send.buffer.bytes=102400
+    socket.receive.buffer.bytes=102400
+    socket.request.max.bytes=104857600
+    log.dirs=/bitnami/kafka/data
+    num.partitions=1
+    num.recovery.threads.per.data.dir=1
+    offsets.topic.replication.factor=1
+    transaction.state.log.replication.factor=1
+    transaction.state.log.min.isr=1
+    log.retention.hours=168
+    log.retention.check.interval.ms=300000
+    zookeeper.connect=zookeeper-0.zookeeper-service.default.svc.cluster.local:2181
+    zookeeper.connection.timeout.ms=18000
+    group.initial.rebalance.delay.ms=0
+    inter.broker.listener.name=SASL_SSL
+    security.protocol=SASL_SSL
+    authorizer.class.name=kafka.security.authorizer.AclAuthorizer
+    sasl.enabled.mechanisms=SCRAM-SHA-512
+    sasl.mechanism.inter.broker.protocol=SCRAM-SHA-512
+    ssl.client.auth=required
+    ssl.endpoint.identification.algorithm=
+    ssl.keystore.location=/bitnami/kafka/config/certs/kafka.keystore.jks
+    ssl.keystore.password=TriZett0
+    ssl.key.password=TriZett0
+    ssl.protocol=TLSv1.2
+    ssl.truststore.location=/bitnami/kafka/config/certs/kafka.truststore.jks
+    ssl.truststore.password=TriZett0
+    super.users=User:alocalbox;User:alocalbox
+    tls.client.auth=none
+    tls.type=JKS
+    ssl.keystore.type=JKS
+    ssl.truststore.type=JKS
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: kafka
+  name: kafka-0
+spec:
+  loadBalancerIP: 20.219.19.197
+  type: LoadBalancer
+  ports:
+  - port: 9094
+    protocol: TCP
+    targetPort: 30092
+  selector:
+    app: kafka
+    run: kafka-0
+status:
+  loadBalancer: {}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka-ss-0
+  labels:
+    app: kafka
+spec:
+  serviceName: kafka-0
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+      run: kafka-0
+  template:
+    metadata:
+      labels:
+        app: kafka
+        run: kafka-0
+    spec:
+      volumes:
+      - name: secrets-vol
+        secret:
+          secretName: kafka-ssl-config
+      - name: config-vol
+        configMap:
+          name: client-properties-config
+      - name: jaas-vol
+        configMap:
+          name: client-properties-config
+      containers:
+      - name: kafka-container
+        image: docker.io/bitnami/kafka:latest
+        imagePullPolicy: IfNotPresent
+        # command: ["sh", "-c", "echo '+++++++++++++++++++++++++++++++++++++++++'"]
+        ports:
+        - containerPort: 30092
+        volumeMounts:
+        - name: secrets-vol
+          mountPath: /bitnami/kafka/config/certs
+        - name: config-vol
+          mountPath: /bitnami/kafka/config
+        - name: kafka-data
+          mountPath: /var/lib/kafka
+        - name: jaas-vol
+          mountPath: /etc/kafka/secrets
+        env:
+        # - name: KAFKA_DEBUG
+        #   value: "true"
+        - name: KAFKA_ADVERTISED_HOST_NAME
+          value: "kafka-ss-0-0.kafka-0.default.svc.cluster.local"
+        - name: KAFKA_CFG_LISTENERS
+          # value: SASL_SSL://:9094
+          value: "SASL_SSL://:9094,EXTERNAL://:30092"
+          # value: "INTERNAL://:9094,EXTERNAL://:30092"
+        - name: KAFKA_CFG_ADVERTISED_LISTENERS
+          # value: SASL_SSL://kafka-ss-0-0.kafka-0.default.svc.cluster.local:9094
+          value: "SASL_SSL://:9094,EXTERNAL://kafka-ss-0-0.kafka-0.default.svc.cluster.local:30092"
+          # value: "INTERNAL://:9092,EXTERNAL://kafka-ss-0-0.kafka-0.default.svc.cluster.local:30092"
+          # value: "INTERNAL://:9092,EXTERNAL://kafka-0:30092"
+        - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
+          value: "PLAINTEXT:PLAINTEXT,SSL:SSL,SASL_PLAINTEXT:SASL_PLAINTEXT,SASL_SSL:SASL_SSL,EXTERNAL:SASL_SSL"
+          # value: "INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+        - name: KAFKA_CFG_ZOOKEEPER_CONNECT
+          value: zookeeper-0.zookeeper-service.default.svc.cluster.local:2181
+        - name: ALLOW_PLAINTEXT_LISTENER
+          value: "yes"
+        - name: KAFKA_CFG_INTER_BROKER_LISTENER_NAME
+          value: SASL_SSL
+          # value: "INTERNAL"
+        - name: KAFKA_ENABLE_KRAFT
+          value: "no"
+        # - name: KAFKA_HEAP_OPTS
+        #   value: -Xms256M -Xmx12G
+# Properties for SSL Kafka Security between Broker and its clients (Producers/consumers)
+        - name: KAFKA_CFG_SSL_KEYSTORE_LOCATION
+          value: kafka.keystore.jks        
+        - name: KAFKA_CFG_SSL_KEYSTORE_PASSWORD
+          value: TriZett0
+        - name: KAFKA_CFG_SSL_TRUSTSTORE_LOCATION
+          value: kafka.truststore.jks
+        - name: KAFKA_CFG_SSL_TRUSTSTORE_PASSWORD
+          value: TriZett0
+        - name: KAFKA_CFG_SSL_KEY_PASSWORD
+          value: TriZett0
+        - name: KAFKA_CFG_SECURITY_INTER_BROKER_PROTOCOL
+          value: SASL_SSL # Only encryption will happen here, not the Authentication
+        - name: KAFKA_CFG_SSL_CLIENT_AUTH
+          value: required   # required, none # other clients needs to connect with SSL auth only
+        - name: KAFKA_CFG_SSL_PROTOCOL
+          value: TLSv1.2
+        - name: KAFKA_CFG_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM
+          value: ' '
+# Properties for SASL Authorization
+        # JVMFLAGS, KAFKA_OPTS, KAFKA_JVM_PERFORMANCE_OPTS
+        - name: KAFKA_OPTS
+          value: "-Djava.security.auth.login.config=/etc/kafka/secrets/kafka_jaas.conf"
+          # value: "-Djava.security.auth.login.config=/opt/bitnami/kafka/config/kafka_jaas.conf"
+        - name: KAFKA_CFG_SASL_ENABLED_MECHANISMS
+          value: SCRAM-SHA-512
+        - name: KAFKA_CFG_SASL_MECHANISM_INTER_BROKER_PROTOCOL
+          value: SCRAM-SHA-512
+        - name: KAFKA_SUPER_USERS
+          value: 'User:alocalbox;User:alocalbox'
+# Properties for Authorization
+# authorizer.class.name=kafka.security.auth.AclAuthorizer
+# allow.everyone.if.no.acl.found=true
+        - name: KAFKA_CFG_AUTHORIZER_CLASS_NAME
+          value: "kafka.security.authorizer.AclAuthorizer"
+        # - name: KAFKA_CFG_SASL_JAAS_CONFIG
+        #   value: org.apache.kafka.common.security.scram.ScramLoginModule required username="kafkabroker" password="TriZett0";
+# Properties for TLS
+        - name: KAFKA_CFG_TLS_CLIENT_AUTH
+          value: none
+        - name: KAFKA_TLS_TYPE
+          value: JKS
+        command:
+        - "sh"
+        - "-c"
+        - |
+          echo "++++++++------------------Export--------------++++++++++"
+          export KAFKA_OPTS=-Djava.security.auth.login.config=/etc/kafka/secrets/kafka_jaas.conf
+          /opt/bitnami/kafka/bin/kafka-configs.sh --zookeeper zookeeper-service:2181 --alter --add-config SCRAM-SHA-512=[iterations=8192,password=TriZett0] --entity-type users --entity-name alocalbox
+          echo "=============+++++++++++++++++++====================="
+          cat /etc/kafka/secrets/server0.properties
+          echo "=============++++++++++++++++++++====================="
+          /opt/bitnami/kafka/bin/kafka-server-start.sh /etc/kafka/secrets/server0.properties
+        # export KAFKA_JAVA_OPTS="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=0.0.0.0:5006"
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 1000
+  volumeClaimTemplates:
+    - metadata:
+        name: kafka-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 2Gi
+# ---
+# kind: NetworkPolicy
+# apiVersion: networking.k8s.io/v1
+# metadata:
+#   name: kafka-network-policy
+# spec:
+#   podSelector:
+#     matchLabels:
+#       app: kafka
+#   policyTypes:
+#     - Ingress
+#   ingress:
+#   - from:
+#     - podSelector:
+#         matchLabels:
+#           app: zookeeper
+#     ports:
+#     - protocol: TCP
+#       port: 2181
+#   - from:
+#     - podSelector:
+#         matchLabels:
+#           app: kafka
+#     ports:
+#       - protocol: TCP
+#         port: 9094
+#   - from:
+#     - podSelector:
+#         matchLabels:
+#           app: kafka
+#     ports:
+#       - protocol: TCP
+#         port: 30092

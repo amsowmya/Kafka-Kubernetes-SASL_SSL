@@ -1,0 +1,1 @@
+kubectl create secret generic kafka-ssl-config --from-file=kafka.keystore.jks --from-file=kafka.truststore.jks --from-file=kafka.client.keystore.jks --from-file=kafka.client.truststore.jks
